@@ -179,13 +179,11 @@
     </footer>
 
     <script>
-        // --- SISTEMA BLINDADO PARA NETLIFY ---
-        
+        // === CONFIGURAÇÃO DA API ===
         const API_KEY = "AIzaSyCBJvLvRtMa9J5F-vyFAvedRdfNDFAzifE"; 
-        let currentPoemText = "";
 
-        // BANCO DE POEMAS DE RESERVA (Backup Infalível)
-        // Isso garante que o site funcione mesmo se a API do Google bloquear o Netlify
+        // === BANCO DE DADOS DE POEMAS (BACKUP) ===
+        // Usado se a API não responder
         const fallbackPoems = {
             normal: [
                 "Keila, como uma flor que desabrocha na manhã,<br>Traz luz e cor onde quer que vá,<br>Sua presença é doce, um presente, um afã,<br>Que faz a vida inteira se alegrar.",
@@ -201,47 +199,46 @@
             ]
         };
 
-        // Função auxiliar para pegar poema de backup
+        let currentPoemText = "";
+
+        // Função auxiliar para pegar poema de backup aleatório
         function getBackupPoem(type) {
             const list = fallbackPoems[type];
             return list[Math.floor(Math.random() * list.length)];
         }
 
-        // Função que gerencia o fluxo
+        // Função Principal
         async function handlePoemRequest(type) {
-            // UI Setup
             const loading = document.getElementById('loading');
             const poemDisplay = document.getElementById('poemText');
             const initialState = document.getElementById('initialState');
             const speakBtn = document.getElementById('speakBtn');
 
+            // Preparar Interface
             initialState.classList.add('hidden');
             poemDisplay.classList.add('hidden');
             speakBtn.classList.add('hidden');
             loading.classList.remove('hidden');
 
             try {
-                // Tenta buscar na IA
+                // 1. TENTATIVA COM A API DO GOOGLE
                 const aiPoem = await fetchFromAI(type);
-                
-                // Sucesso com IA
                 displayPoem(aiPoem);
+                console.log("Poema gerado pela IA com sucesso!");
 
             } catch (error) {
-                // Falha na IA (Netlify bloqueou, chave inválida, etc)
-                console.log("Modo IA falhou, ativando Modo Backup para Keila não perceber erro.");
+                // 2. SE A API FALHAR (Erro 401, Sem internet, etc)
+                console.warn("API falhou, usando banco de poemas para garantir funcionamento:", error);
                 
-                // Usa backup instantaneamente
-                const backupPoem = getBackupPoem(type);
-                displayPoem(backupPoem);
-            } finally {
-                loading.classList.add('hidden');
-                poemDisplay.classList.remove('hidden');
-                speakBtn.classList.remove('hidden');
+                // Pequeno delay para simular "pensamento" e não ser instantâneo demais
+                setTimeout(() => {
+                    const backupPoem = getBackupPoem(type);
+                    displayPoem(backupPoem);
+                }, 1000);
             }
         }
 
-        // Função separada para IA com Timeout (se demorar 4s, desiste e usa backup)
+        // Função de conexão com a API
         async function fetchFromAI(type) {
             let prompt = "";
             if (type === 'normal') {
@@ -250,8 +247,9 @@
                 prompt = `Escreva um poema curto (max 4 linhas) de conforto para uma mulher chamada Keila que teve um dia ruim. Comece OBRIGATORIAMENTE com a palavra "Keila". Tema: Vai ficar tudo bem, amor e carinho.`;
             }
 
+            // Timeout de 4 segundos para não travar
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 segundos max
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
                 method: 'POST',
@@ -262,24 +260,32 @@
 
             clearTimeout(timeoutId);
 
-            if (!response.ok) throw new Error('Erro na resposta da API');
+            if (!response.ok) {
+                throw new Error(`Erro na API: ${response.status}`);
+            }
             
             const data = await response.json();
-            if (data.error) throw new Error('Erro no conteúdo da API');
+            if (data.error) throw new Error(data.error.message);
 
             return data.candidates[0].content.parts[0].text.trim().replace(/\n/g, '<br>');
         }
 
-        // Função de Exibição
+        // Exibir na tela
         function displayPoem(htmlText) {
+            const loading = document.getElementById('loading');
             const poemDisplay = document.getElementById('poemText');
+            const speakBtn = document.getElementById('speakBtn');
+
+            loading.classList.add('hidden');
             poemDisplay.innerHTML = htmlText;
+            poemDisplay.classList.remove('hidden');
+            speakBtn.classList.remove('hidden');
             
-            // Salva texto limpo para leitura em voz alta
+            // Limpa o texto para o leitor de voz (remove <br>)
             currentPoemText = htmlText.replace(/<br>/g, ' '); 
         }
 
-        // Função de Fala
+        // Falar o poema
         function speakPoem() {
             if (!currentPoemText) return;
 
@@ -304,4 +310,4 @@
 </html>
 
 
-  
+    
